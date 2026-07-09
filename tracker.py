@@ -26,11 +26,11 @@ TRACK_CHANNELS = {
         "target_date": "2017-07-12T00:00:00Z"
     },
     "Gonzok": {
-        "playlist_id": "UUpDqD6Py6uGz-w6nYJqTJtQ", 
+        "playlist_id": "UU8hiDnhwE7ieY1atgDE_yUg", 
         "target_date": "2022-07-09T00:00:00Z"
     },
     "Mack": {
-        "playlist_id": "UUcEYnFxkf9WT_e4rMnRPI1g", 
+        "playlist_id": "UUHtxSHalLbyjDgUsl2nIbIQ", 
         "target_date": "2026-03-06T00:00:00Z"
     }
 }
