@@ -188,10 +188,14 @@ def process_channel_videos(channel_name, playlist_id, target_date):
             img_hash, img_content = get_image_data(yt_thumb_url)
             if not img_hash: continue
                 
-            res = supabase.table("thumbnail_history").select("image_hash").eq("video_id", v_id).order("checked_at", desc=True).limit(1).execute()
-            latest_hash = res.data[0]["image_hash"] if res.data and res.data[0].get("image_hash") else None
+            # ⭐️ [수정 1] .limit(1)을 지우고 이 영상의 역대 썸네일 해시를 "전부 다" 가져옴
+            res = supabase.table("thumbnail_history").select("image_hash").eq("video_id", v_id).execute()
             
-            if latest_hash != img_hash:
+            # ⭐️ [수정 2] 가져온 과거 해시들을 조회하기 쉽게 리스트(배열)로 묶어줌
+            history_hashes = [record["image_hash"] for record in res.data] if res.data else []
+            
+            # ⭐️ [수정 3] 방금 받은 해시(img_hash)가 과거 리스트(history_hashes)에 단 한 번도 없었을 때만 저장!
+            if img_hash not in history_hashes:
                 file_name = f"{v_id}_{img_hash}.jpg"
                 
                 try:
@@ -212,7 +216,7 @@ def process_channel_videos(channel_name, playlist_id, target_date):
                 }).execute()
                 
                 changed_count += 1
-                print(f"   🔄 썸네일 영구 저장 됨: {v_id}")
+                print(f"   🔄 새 썸네일 영구 저장 됨: {v_id}")
 
         print(f"🎉 [{channel_name}] 실행 완료! 새로운 썸네일 {changed_count}개 저장됨.")
         
