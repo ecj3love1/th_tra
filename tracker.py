@@ -1,10 +1,11 @@
 import requests
 import re
 import os
+import hashlib
 from supabase import create_client, Client
 
 # ==========================================
-# 1. API 키 및 설정 (안전하게 숨기기)
+# 1. API 키 및 설정
 # ==========================================
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -13,7 +14,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 PLAYLIST_ID = "UUX6OQ3DkcsbYNE6H8uQQuVA"
 TARGET_DATE = "2018-02-23T00:00:00Z"
 
-# 수파베이스 클라이언트 연결
+# 수파베이스 연결
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ==========================================
@@ -28,7 +29,22 @@ def get_total_seconds(duration_str):
     return hours * 3600 + minutes * 60 + seconds
 
 # ==========================================
-# 3. 메인 수집 및 DB 저장 함수
+# 3. 사진 지문(Hash) 추출 함수 (핵심 추가 기능)
+# ==========================================
+def get_image_data(url):
+    try:
+        res = requests.get(url)
+        if res.status_code == 200:
+            image_content = res.content
+            # 사진 데이터를 바탕으로 고유한 지문(SHA-256) 생성
+            image_hash = hashlib.sha256(image_content).hexdigest()
+            return image_hash, image_content
+    except Exception as e:
+        print(f"이미지 다운로드 실패: {e}")
+    return None, None
+
+# ==========================================
+# 4. 메인 수집 및 DB 저장 함수
 # ==========================================
 def fetch_and_save_videos():
     video_dict = {}
@@ -37,7 +53,6 @@ def fetch_and_save_videos():
     
     print("🚀 [1단계] 유튜브 영상 데이터를 수집합니다...")
 
-    # [STEP 1] 전체 영상 ID 및 기본 정보 수집
     while True:
         page_query = f"&pageToken={next_page_token}" if next_page_token else ""
         playlist_url = f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId={PLAYLIST_ID}&key={YOUTUBE_API_KEY}{page_query}"
@@ -59,22 +74,22 @@ def fetch_and_save_videos():
             thumbnails = snippet.get("thumbnails", {})
             thumbnail_url = thumbnails.get("maxres", {}).get("url") or thumbnails.get("high", {}).get("url") or "썸네일 없음"
             
-            video_dict[video_id] = {
-                "title": snippet.get("title"),
-                "thumbnail": thumbnail_url,
-                "published_at": published_at
-            }
-            video_ids.append(video_id)
+            if thumbnail_url != "썸네일 없음":
+                video_dict[video_id] = {
+                    "title": snippet.get("title"),
+                    "thumbnail": thumbnail_url,
+                    "published_at": published_at
+                }
+                video_ids.append(video_id)
             
         next_page_token = data.get("nextPageToken")
         if not next_page_token: break
 
-    print(f"✅ {len(video_ids)}개의 영상 발견! (2018.02.23 이후)")
-    print("⏳ [2단계] 쇼츠(Shorts)를 걸러내고 DB에 저장합니다...")
+    print(f"✅ {len(video_ids)}개의 영상 발견!")
+    print("⏳ [2단계] 영상을 필터링하고 사진 지문을 검사합니다...")
 
-    # [STEP 2] 50개씩 쪼개서 길이 확인 및 DB 저장 준비
     videos_to_insert = []
-    thumbnails_to_insert = []
+    thumbnails_to_check = []
     
     for i in range(0, len(video_ids), 50):
         chunk = video_ids[i:i+50]
@@ -87,50 +102,69 @@ def fetch_and_save_videos():
             v_id = v_item.get("id")
             duration_str = v_item.get("contentDetails", {}).get("duration", "")
             
-            # 3분(180초) 초과 롱폼 영상만 골라내기
             if get_total_seconds(duration_str) > 180:
                 info = video_dict[v_id]
-                
-                # videos 테이블 데이터
                 videos_to_insert.append({
                     "id": v_id,
                     "title": info["title"],
                     "published_at": info["published_at"]
                 })
-                
-                # thumbnail_history 테이블 데이터
-                thumbnails_to_insert.append({
+                thumbnails_to_check.append({
                     "video_id": v_id,
                     "thumbnail_url": info["thumbnail"]
                 })
 
-    # ==========================================
-    # [STEP 3] 수파베이스(DB)에 데이터 쏘기
-    # ==========================================
     try:
-        # 1. videos 테이블에 정보 저장 (upsert를 써서 중복 에러 방지)
+        # 1. videos 테이블 업데이트
         supabase.table("videos").upsert(videos_to_insert).execute()
         
-        # 2. 썸네일 변경 여부 확인 후 저장
+        # 2. 썸네일 검사 및 내 창고 영구 보존 로직
         changed_count = 0
-        for t in thumbnails_to_insert:
+        for t in thumbnails_to_check:
             v_id = t["video_id"]
-            new_thumb = t["thumbnail_url"]
+            yt_thumb_url = t["thumbnail_url"]
             
-            # DB에서 이 영상의 가장 최근 썸네일 1개 가져오기
-            res = supabase.table("thumbnail_history").select("thumbnail_url").eq("video_id", v_id).order("checked_at", desc=True).limit(1).execute()
-            
-            latest_thumb = res.data[0]["thumbnail_url"] if res.data else None
-            
-            # DB에 썸네일이 아예 없거나, 기존 썸네일과 다를 때만 추가!
-            if latest_thumb != new_thumb:
-                supabase.table("thumbnail_history").insert([t]).execute()
-                changed_count += 1
+            # 유튜브에서 사진을 몰래 다운받아 지문 채취
+            img_hash, img_content = get_image_data(yt_thumb_url)
+            if not img_hash:
+                continue
                 
-        print(f"🎉 스케줄러 실행 완료! 새로운 썸네일 {changed_count}개 업데이트 됨.")
+            # DB에서 이 영상의 가장 최근 지문 가져오기
+            res = supabase.table("thumbnail_history").select("image_hash").eq("video_id", v_id).order("checked_at", desc=True).limit(1).execute()
+            latest_hash = res.data[0]["image_hash"] if res.data and res.data[0].get("image_hash") else None
+            
+            # ⭐️ 지문이 다르면 (즉, 유튜버가 사진을 바꿨거나 처음 저장하는 경우면)
+            if latest_hash != img_hash:
+                # 창고에 저장될 파일 이름: "영상아이디_지문.jpg"
+                file_name = f"{v_id}_{img_hash}.jpg"
+                
+                # 1) 내 창고(Storage)에 진짜 사진 파일 업로드
+                try:
+                    supabase.storage.from_("thumbnails").upload(
+                        path=file_name,
+                        file=img_content,
+                        file_options={"content-type": "image/jpeg"}
+                    )
+                except Exception as e:
+                    pass # 이미 업로드된 파일이 있으면 조용히 무시
+                
+                # 2) 내 창고의 영구 접속 주소 가져오기
+                storage_url = supabase.storage.from_("thumbnails").get_public_url(file_name)
+                
+                # 3) DB에 기록 (유튜브 주소가 아닌 내 창고 주소와 지문을 저장)
+                supabase.table("thumbnail_history").insert({
+                    "video_id": v_id,
+                    "thumbnail_url": storage_url,
+                    "image_hash": img_hash
+                }).execute()
+                
+                changed_count += 1
+                print(f"🔄 썸네일 영구 저장 됨: {v_id}")
+
+        print(f"🎉 스케줄러 실행 완료! 새로운 썸네일 {changed_count}개 내 창고에 영구 보존됨.")
         
     except Exception as e:
-        print(f"🚨 DB 저장 중 에러가 발생했습니다: {e}")
+        print(f"🚨 에러 발생: {e}")
 
 if __name__ == "__main__":
     fetch_and_save_videos()
