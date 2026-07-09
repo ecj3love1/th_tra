@@ -21,6 +21,18 @@ TRACK_CHANNELS = {
         "playlist_id": "UUnmGIkw-KdI0W5siakKPKog", 
         "target_date": "2021-01-01T00:00:00Z"
     }
+    "Mark Rober": {
+        "playlist_id": "UUY1kMZp36IQSyNx_9h4mpCg", 
+        "target_date": "2017-07-12T00:00:00Z"
+    }
+    "Gonzok": {
+        "playlist_id": "UUpDqD6Py6uGz-w6nYJqTJtQ", 
+        "target_date": "2022-07-09T00:00:00Z"
+    }
+    "Mack": {
+        "playlist_id": "UUcEYnFxkf9WT_e4rMnRPI1g", 
+        "target_date": "2026-03-06T00:00:00Z"
+    }
 }
 
 # 수파베이스 연결
