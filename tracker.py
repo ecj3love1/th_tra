@@ -140,13 +140,14 @@ def fetch_and_save_videos():
                 
                 # 1) 내 창고(Storage)에 진짜 사진 파일 업로드
                 try:
-                    supabase.storage.from_("thumbnails").upload(
+                    response = supabase.storage.from_("thumbnails").upload(
                         path=file_name,
                         file=img_content,
                         file_options={"content-type": "image/jpeg"}
                     )
+                    print(f"✅ 업로드 성공: {file_name}")
                 except Exception as e:
-                    pass # 이미 업로드된 파일이 있으면 조용히 무시
+                    print(f"❌ 업로드 실패 상세: {e}") # 에러 내용을 직접 출력!
                 
                 # 2) 내 창고의 영구 접속 주소 가져오기
                 storage_url = supabase.storage.from_("thumbnails").get_public_url(file_name)
