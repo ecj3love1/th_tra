@@ -11,7 +11,7 @@ YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-# ⭐️ [핵심 변경 포인트] 채널별로 플레이리스트 ID와 타겟 날짜를 각각 지정!
+# ⭐️ 채널별로 플레이리스트 ID와 타겟 날짜를 각각 지정!
 TRACK_CHANNELS = {
     "MrBeast": {
         "playlist_id": "UUX6OQ3DkcsbYNE6H8uQQuVA",
@@ -52,9 +52,44 @@ def get_image_data(url):
     return None, None
 
 # ==========================================
-# 4. 단일 채널 수집 및 DB 저장 함수
+# 4. (추가됨) 채널 정보(프로필 사진) 자동 등록 함수
 # ==========================================
-# ⭐️ target_date 매개변수 추가
+def auto_register_channel(channel_name, playlist_id):
+    # 재생목록 ID(UU...)를 채널 ID(UC...)로 변환
+    channel_id = "UC" + playlist_id[2:]
+    
+    # 유튜브 채널 API 호출해서 프사 가져오기
+    url = f"https://www.googleapis.com/youtube/v3/channels?part=snippet&id={channel_id}&key={YOUTUBE_API_KEY}"
+    
+    try:
+        res = requests.get(url)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("items"):
+                profile_url = data["items"][0]["snippet"]["thumbnails"]["high"]["url"]
+                
+                # 수파베이스에 이미 해당 채널이 있는지 확인
+                existing = supabase.table("channels").select("id").eq("name", channel_name).execute()
+                
+                if not existing.data:
+                    # 없으면 새로 자동 등록
+                    supabase.table("channels").insert({
+                        "name": channel_name,
+                        "profile_url": profile_url
+                    }).execute()
+                    print(f"🌟 [{channel_name}] 채널 정보(프사) 자동 등록 완료!")
+                else:
+                    # 이미 있으면 프사 주소 최신화
+                    supabase.table("channels").update({
+                        "profile_url": profile_url
+                    }).eq("name", channel_name).execute()
+                    
+    except Exception as e:
+        print(f"🚨 [{channel_name}] 채널 자동 등록 실패: {e}")
+
+# ==========================================
+# 5. 단일 채널 수집 및 DB 저장 함수
+# ==========================================
 def process_channel_videos(channel_name, playlist_id, target_date):
     video_dict = {}
     video_ids = []
@@ -76,7 +111,6 @@ def process_channel_videos(channel_name, playlist_id, target_date):
             snippet = item.get("snippet", {})
             published_at = snippet.get("publishedAt", "")
             
-            # ⭐️ 채널별로 전달받은 target_date 적용
             if published_at < target_date:
                 continue
                 
@@ -149,7 +183,7 @@ def process_channel_videos(channel_name, playlist_id, target_date):
                 file_name = f"{v_id}_{img_hash}.jpg"
                 
                 try:
-                    response = supabase.storage.from_("thumbnails").upload(
+                    supabase.storage.from_("thumbnails").upload(
                         path=file_name,
                         file=img_content,
                         file_options={"content-type": "image/jpeg"}
@@ -174,13 +208,16 @@ def process_channel_videos(channel_name, playlist_id, target_date):
         print(f"🚨 [{channel_name}] 에러 발생: {e}")
 
 # ==========================================
-# 5. 메인 제어 함수 (모든 채널 순회)
+# 6. 메인 제어 함수 (모든 채널 순회)
 # ==========================================
 def fetch_and_save_videos():
     print("🎬 [전체 시작] 지정된 채널들의 트래킹을 시작합니다.")
     
-    # ⭐️ 딕셔너리 구조 변경에 따른 반복문 수정
     for name, config in TRACK_CHANNELS.items():
+        # ⭐️ 영상 수집 전, 채널 프로필 사진부터 자동으로 등록/업데이트!
+        auto_register_channel(name, config["playlist_id"])
+        
+        # 이후 해당 채널 영상 수집 진행
         process_channel_videos(name, config["playlist_id"], config["target_date"])
         
     print("\n🏁 [전체 종료] 모든 채널의 실행이 완료되었습니다.")
