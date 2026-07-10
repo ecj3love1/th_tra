@@ -64,13 +64,10 @@ def get_image_data(url):
     return None, None
 
 # ==========================================
-# 4. (추가됨) 채널 정보(프로필 사진) 자동 등록 함수
+# 4. 채널 정보(프로필 사진) 자동 등록 함수
 # ==========================================
 def auto_register_channel(channel_name, playlist_id):
-    # 재생목록 ID(UU...)를 채널 ID(UC...)로 변환
     channel_id = "UC" + playlist_id[2:]
-    
-    # 유튜브 채널 API 호출해서 프사 가져오기
     url = f"https://www.googleapis.com/youtube/v3/channels?part=snippet&id={channel_id}&key={YOUTUBE_API_KEY}"
     
     try:
@@ -79,23 +76,18 @@ def auto_register_channel(channel_name, playlist_id):
             data = res.json()
             if data.get("items"):
                 profile_url = data["items"][0]["snippet"]["thumbnails"]["high"]["url"]
-                
-                # 수파베이스에 이미 해당 채널이 있는지 확인
                 existing = supabase.table("channels").select("id").eq("name", channel_name).execute()
                 
                 if not existing.data:
-                    # 없으면 새로 자동 등록
                     supabase.table("channels").insert({
                         "name": channel_name,
                         "profile_url": profile_url
                     }).execute()
                     print(f"🌟 [{channel_name}] 채널 정보(프사) 자동 등록 완료!")
                 else:
-                    # 이미 있으면 프사 주소 최신화
                     supabase.table("channels").update({
                         "profile_url": profile_url
                     }).eq("name", channel_name).execute()
-                    
     except Exception as e:
         print(f"🚨 [{channel_name}] 채널 자동 등록 실패: {e}")
 
@@ -188,13 +180,10 @@ def process_channel_videos(channel_name, playlist_id, target_date):
             img_hash, img_content = get_image_data(yt_thumb_url)
             if not img_hash: continue
                 
-            # ⭐️ [수정 1] .limit(1)을 지우고 이 영상의 역대 썸네일 해시를 "전부 다" 가져옴
             res = supabase.table("thumbnail_history").select("image_hash").eq("video_id", v_id).execute()
-            
-            # ⭐️ [수정 2] 가져온 과거 해시들을 조회하기 쉽게 리스트(배열)로 묶어줌
             history_hashes = [record["image_hash"] for record in res.data] if res.data else []
             
-            # ⭐️ [수정 3] 방금 받은 해시(img_hash)가 과거 리스트(history_hashes)에 단 한 번도 없었을 때만 저장!
+            # ⭐️ [핵심 변경] 로그를 세분화하여 봇의 검사 과정을 터미널에 명확히 출력
             if img_hash not in history_hashes:
                 file_name = f"{v_id}_{img_hash}.jpg"
                 
@@ -216,7 +205,10 @@ def process_channel_videos(channel_name, playlist_id, target_date):
                 }).execute()
                 
                 changed_count += 1
-                print(f"   🔄 새 썸네일 영구 저장 됨: {v_id}")
+                print(f"   🔄 [NEW] 새 썸네일 발견 및 영구 저장 됨: {v_id} (해시: {img_hash[:8]}...)")
+            else:
+                # 이 줄이 추가되었습니다! 봇이 검사 후 중복이라 판단하여 패스한 내역을 보여줍니다.
+                print(f"   ⏩ [SKIP] 기존 썸네일 유지 (변경 없음): {v_id} (해시 일치: {img_hash[:8]}...)")
 
         print(f"🎉 [{channel_name}] 실행 완료! 새로운 썸네일 {changed_count}개 저장됨.")
         
@@ -230,10 +222,7 @@ def fetch_and_save_videos():
     print("🎬 [전체 시작] 지정된 채널들의 트래킹을 시작합니다.")
     
     for name, config in TRACK_CHANNELS.items():
-        # ⭐️ 영상 수집 전, 채널 프로필 사진부터 자동으로 등록/업데이트!
         auto_register_channel(name, config["playlist_id"])
-        
-        # 이후 해당 채널 영상 수집 진행
         process_channel_videos(name, config["playlist_id"], config["target_date"])
         
     print("\n🏁 [전체 종료] 모든 채널의 실행이 완료되었습니다.")
