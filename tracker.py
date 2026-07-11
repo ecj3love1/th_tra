@@ -32,6 +32,14 @@ TRACK_CHANNELS = {
     "Mack": {
         "playlist_id": "UUHtxSHalLbyjDgUsl2nIbIQ", 
         "target_date": "2026-03-06T00:00:00Z"
+    },
+    "The Royalty Family": {
+        "playlist_id": "UUja7QUMRG9AD8X2F_vXFb9A", 
+        "target_date": "2023-09-09T00:00:00Z"
+    },
+    "Airrack": {
+        "playlist_id": "UUyps-v4WNjWDnYRKmZ4BUGw", 
+        "target_date": "2021-05-03T00:00:00Z"
     }
 }
 
