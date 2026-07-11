@@ -94,6 +94,9 @@ def auto_register_channel(channel_name, playlist_id):
                     supabase.table("channels").update({
                         "profile_url": profile_url
                     }).eq("name", channel_name).execute()
+        else:
+            # ⭐️ 에러 원인 출력 추가
+            print(f"⚠️ [{channel_name}] 프로필 API 에러 ({res.status_code}): {res.text}")
     except Exception as e:
         print(f"🚨 [{channel_name}] 채널 자동 등록 실패: {e}")
 
@@ -116,7 +119,10 @@ def process_channel_videos(channel_name, playlist_id, target_date):
         total_quota_used += 1  # ⭐️ API 호출 시 비용 1 증가
         
         if res.status_code != 200:
-            print(f"🚨 [{channel_name}] 유튜브 API 에러! 다음 채널로 넘어갑니다.")
+            # ⭐️ 에러 원인 출력 추가
+            print(f"🚨 [{channel_name}] 유튜브 API 에러 발생! 상태 코드: {res.status_code}")
+            print(f"에러 상세 내용: {res.text}")
+            print("다음 채널로 넘어갑니다.")
             return
             
         data = res.json()
