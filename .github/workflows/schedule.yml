@@ -1,8 +1,11 @@
 name: Python YouTube Tracker
 
 on:
-  schedule:
-    - cron: '*/10 * * * *'  # 매 10분마다 실행되도록 수정 완료
+  # ⭐️ 핵심: cron-job.org를 사용하므로 깃허브 자체 알람은 중복 실행을 막기 위해 꺼둡니다.
+  # schedule:
+  #   - cron: '*/10 * * * *' 
+  
+  # 외부(cron-job.org)에서 원격으로 찌를 수 있게 해주는 문만 열어둡니다.
   workflow_dispatch:
 
 jobs:
