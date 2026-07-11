@@ -38,6 +38,9 @@ TRACK_CHANNELS = {
 # 수파베이스 연결
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# ⭐️ 예상 비용(할당량) 추적을 위한 전역 변수
+total_quota_used = 0
+
 # ==========================================
 # 2. 영상 길이 변환 함수
 # ==========================================
@@ -67,11 +70,14 @@ def get_image_data(url):
 # 4. 채널 정보(프로필 사진) 자동 등록 함수
 # ==========================================
 def auto_register_channel(channel_name, playlist_id):
+    global total_quota_used
     channel_id = "UC" + playlist_id[2:]
     url = f"https://www.googleapis.com/youtube/v3/channels?part=snippet&id={channel_id}&key={YOUTUBE_API_KEY}"
     
     try:
         res = requests.get(url)
+        total_quota_used += 1  # ⭐️ API 호출 시 비용 1 증가
+        
         if res.status_code == 200:
             data = res.json()
             if data.get("items"):
@@ -95,6 +101,7 @@ def auto_register_channel(channel_name, playlist_id):
 # 5. 단일 채널 수집 및 DB 저장 함수
 # ==========================================
 def process_channel_videos(channel_name, playlist_id, target_date):
+    global total_quota_used
     video_dict = {}
     video_ids = []
     next_page_token = ""
@@ -106,6 +113,8 @@ def process_channel_videos(channel_name, playlist_id, target_date):
         playlist_url = f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId={playlist_id}&key={YOUTUBE_API_KEY}{page_query}"
         
         res = requests.get(playlist_url)
+        total_quota_used += 1  # ⭐️ API 호출 시 비용 1 증가
+        
         if res.status_code != 200:
             print(f"🚨 [{channel_name}] 유튜브 API 에러! 다음 채널로 넘어갑니다.")
             return
@@ -146,7 +155,11 @@ def process_channel_videos(channel_name, playlist_id, target_date):
         ids_string = ",".join(chunk)
         
         video_url = f"https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id={ids_string}&key={YOUTUBE_API_KEY}"
-        video_items = requests.get(video_url).json().get("items", [])
+        
+        res = requests.get(video_url)
+        total_quota_used += 1  # ⭐️ API 호출 시 비용 1 증가
+        
+        video_items = res.json().get("items", [])
         
         for v_item in video_items:
             v_id = v_item.get("id")
@@ -183,7 +196,6 @@ def process_channel_videos(channel_name, playlist_id, target_date):
             res = supabase.table("thumbnail_history").select("image_hash").eq("video_id", v_id).execute()
             history_hashes = [record["image_hash"] for record in res.data] if res.data else []
             
-            # ⭐️ [핵심 변경] 로그를 세분화하여 봇의 검사 과정을 터미널에 명확히 출력
             if img_hash not in history_hashes:
                 file_name = f"{v_id}_{img_hash}.jpg"
                 
@@ -207,7 +219,6 @@ def process_channel_videos(channel_name, playlist_id, target_date):
                 changed_count += 1
                 print(f"   🔄 [NEW] 새 썸네일 발견 및 영구 저장 됨: {v_id} (해시: {img_hash[:8]}...)")
             else:
-                # 이 줄이 추가되었습니다! 봇이 검사 후 중복이라 판단하여 패스한 내역을 보여줍니다.
                 print(f"   ⏩ [SKIP] 기존 썸네일 유지 (변경 없음): {v_id} (해시 일치: {img_hash[:8]}...)")
 
         print(f"🎉 [{channel_name}] 실행 완료! 새로운 썸네일 {changed_count}개 저장됨.")
@@ -226,6 +237,14 @@ def fetch_and_save_videos():
         process_channel_videos(name, config["playlist_id"], config["target_date"])
         
     print("\n🏁 [전체 종료] 모든 채널의 실행이 완료되었습니다.")
+    
+    # ⭐️ 맨 마지막에 사용된 API 비용 계산 출력
+    print("\n==========================================")
+    print("📊 [API 비용 정산]")
+    print(f"🔹 이번 실행에 소모된 유튜브 API 할당량(Quota): {total_quota_used}")
+    print(f"🔹 일일 무료 잔여량: 대략 {10000 - total_quota_used} / 10,000")
+    print("   (참고: 매일 오후 4시(한국시간)에 10,000으로 초기화됩니다.)")
+    print("==========================================\n")
 
 if __name__ == "__main__":
     fetch_and_save_videos()
