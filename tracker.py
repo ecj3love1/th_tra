@@ -40,6 +40,10 @@ TRACK_CHANNELS = {
     "Airrack": {
         "playlist_id": "UUyps-v4WNjWDnYRKmZ4BUGw", 
         "target_date": "2021-05-03T00:00:00Z"
+    },
+    "Tonio Guajardo": {
+        "playlist_id": "UUhEpP2eDIS2Ixm5bl81kFlQ", 
+        "target_date": "2024-04-20T00:00:00Z"
     }
 }
 
