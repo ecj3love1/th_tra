@@ -44,6 +44,10 @@ TRACK_CHANNELS = {
     "Tonio Guajardo": {
         "playlist_id": "UUhEpP2eDIS2Ixm5bl81kFlQ", 
         "target_date": "2024-04-20T00:00:00Z"
+    },
+    "pierson": {
+        "playlist_id": "UUVAbWl3d3XuHY28wU9DoDpA", 
+        "target_date": "2023-08-18T00:00:00Z"
     }
 }
 
