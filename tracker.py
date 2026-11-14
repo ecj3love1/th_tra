@@ -48,6 +48,10 @@ TRACK_CHANNELS = {
     "pierson": {
         "playlist_id": "UUVAbWl3d3XuHY28wU9DoDpA", 
         "target_date": "2023-08-18T00:00:00Z"
+    },
+    "MrBeast Gaming": {
+        "playlist_id": "UUIPPMRA040LQr5QPyJEbmXA", 
+        "target_date": "2026-03-01T00:00:00Z"
     }
 }
 
